@@ -1,1 +1,1 @@
-# AIBuddy
+# vectra
