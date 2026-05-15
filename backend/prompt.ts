@@ -30,6 +30,26 @@ export const PROMPT_TEMPLATE = `
 ##Web search results
 
 {{WEB_SEARCH_RESULTS}}
+## CONVERSATION_HISTORY
+{{CONVERSATION_HISTORY}}
 ## USER_QUERY
 {{USER_QUERY}}
 `;
+
+export function buildPrompt({
+  query,
+  webResults,
+  history,
+}: {
+  query: string;
+  webResults: unknown;
+  history: Array<{ role: string; content: string }>;
+}) {
+  const conversationHistory = history.length
+    ? history.map((message) => `${message.role}: ${message.content}`).join("\n")
+    : "No previous conversation.";
+
+  return PROMPT_TEMPLATE.replace("{{WEB_SEARCH_RESULTS}}", JSON.stringify(webResults))
+    .replace("{{CONVERSATION_HISTORY}}", conversationHistory)
+    .replace("{{USER_QUERY}}", query);
+}
