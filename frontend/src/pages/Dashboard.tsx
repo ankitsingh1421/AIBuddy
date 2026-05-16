@@ -3,15 +3,18 @@ import { useNavigate, useParams } from "react-router";
 import {
   Check,
   ArrowUp,
+  ChevronRight,
   Compass,
   Copy,
   FileText,
+  Globe,
   History,
   Image as ImageIcon,
   Link2,
   LoaderCircle,
   LogOut,
   MessageSquarePlus,
+  Mic,
   PanelLeft,
   Plus,
   Search,
@@ -109,6 +112,7 @@ export default function Dashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [composerMode, setComposerMode] = useState<"search" | "focus">("search");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [error, setError] = useState("");
   const [authError, setAuthError] = useState("");
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -301,6 +305,7 @@ export default function Dashboard() {
     setAttachments([]);
     setAuthError("");
     setShowAuthModal(false);
+    setMobileSidebarOpen(false);
     navigate("/dashboard", { replace: true });
   }
 
@@ -312,6 +317,7 @@ export default function Dashboard() {
     setError("");
     setActiveTab("answer");
     localStorage.removeItem(ACTIVE_CONVERSATION_KEY);
+    setMobileSidebarOpen(false);
     navigate("/dashboard", { replace: true });
   }
 
@@ -569,6 +575,30 @@ export default function Dashboard() {
     .map((part) => part[0]?.toUpperCase())
     .join("");
 
+  function openLoginModal() {
+    setAuthError("Guest users can ask only 5 times. Sign in to continue.");
+    setShowAuthModal(true);
+  }
+
+  function openConversation(conversationId: string) {
+    setMobileSidebarOpen(false);
+
+    if (conversationId.startsWith("local-")) {
+      const localConversation = getLocalConversations().find((item) => item.id === conversationId);
+      if (!localConversation) return;
+
+      setActiveConversationId(localConversation.id);
+      setMessages(localConversation.messages);
+      setAttachments([]);
+      setActiveTab("answer");
+      localStorage.setItem(ACTIVE_CONVERSATION_KEY, localConversation.id);
+      navigate(`/c/${localConversation.id}`, { replace: true });
+      return;
+    }
+
+    void loadConversation(conversationId);
+  }
+
   return (
     <div className="h-screen overflow-hidden bg-[#141311] text-[#f4efe8]">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(120,102,73,0.12),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_35%)]" />
@@ -584,151 +614,89 @@ export default function Dashboard() {
           }}
           onLogin={login}
         />
+        <div
+          className={`absolute inset-0 z-30 bg-black/55 backdrop-blur-sm transition lg:hidden ${
+            mobileSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+          }`}
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+        <aside
+          className={`absolute inset-y-0 left-0 z-40 w-[86vw] max-w-[380px] border-r border-white/8 bg-[#1b1a18]/98 transition-transform duration-300 lg:hidden ${
+            mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <SidebarContent
+            sidebarOpen
+            user={user}
+            initials={initials}
+            conversations={conversations}
+            activeConversationId={activeConversationId}
+            loadingConversationId={loadingConversationId}
+            onToggleSidebar={() => setMobileSidebarOpen(false)}
+            onStartNewChat={startNewChat}
+            onOpenConversation={openConversation}
+            onSignIn={() => {
+              setMobileSidebarOpen(false);
+              setShowAuthModal(true);
+            }}
+            onLogout={logout}
+            mobile
+          />
+        </aside>
         <aside
           className={`${
             sidebarOpen ? "w-[280px]" : "w-[92px]"
           } hidden h-full shrink-0 border-r border-white/6 bg-[#1b1a18]/95 transition-[width] duration-300 lg:flex`}
         >
-          <div className="flex h-full w-full flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-5">
-              <div className="flex items-center gap-3">
-                <div className="flex size-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white">
-                  <Sparkles className="size-4" />
-                </div>
-                {sidebarOpen ? <span className="text-lg font-medium tracking-wide text-white">vectra</span> : null}
-                {sidebarOpen ? <BetaBadge /> : null}  
-              </div>
-              <button
-                className="rounded-xl border border-white/8 bg-white/5 p-2 text-[#b8b1a5] transition hover:text-white"
-                onClick={() => setSidebarOpen((current) => !current)}
-                type="button"
-              >
-                <PanelLeft className="size-4" />
-              </button>
-            </div>
-
-            <div className="px-3">
-              <button
-                className="flex w-full items-center gap-3 rounded-2xl bg-white/6 px-4 py-3 text-left text-[#f4efe8] transition hover:bg-white/10"
-                onClick={startNewChat}
-                type="button"
-              >
-                <MessageSquarePlus className="size-4 shrink-0" />
-                {sidebarOpen ? <span className="text-sm">New</span> : null}
-              </button>
-            </div>
-
-            <div className="mt-6 space-y-1 px-3 text-[#9b9488]">
-              <SidebarLink icon={Search} label="Computer" visible={sidebarOpen} />
-              <SidebarLink icon={Compass} label="Spaces" visible={sidebarOpen} />
-              <SidebarLink icon={Sparkles} label="Artefacts" visible={sidebarOpen} />
-              <SidebarLink icon={Link2} label="Customise" visible={sidebarOpen} />
-            </div>
-
-            <div className="mt-8 flex items-center gap-3 px-5 text-[#d8d1c5]">
-              <History className="size-4" />
-              {sidebarOpen ? <span className="text-sm">History</span> : null}
-            </div>
-
-            <div className="mt-3 flex-1 space-y-2 overflow-y-auto px-3 pb-4">
-              {conversations.length ? conversations.map((conversation) => (
-                <button
-                  key={conversation.id}
-                  className={`w-full rounded-2xl px-3 py-3 text-left transition ${
-                    activeConversationId === conversation.id
-                      ? "bg-white/10 text-white"
-                      : "text-[#a79f92] hover:bg-white/5 hover:text-white"
-                  }`}
-                  onClick={() => {
-                    if (conversation.id.startsWith("local-")) {
-                      const localConversation = getLocalConversations().find((item) => item.id === conversation.id);
-                      if (!localConversation) return;
-                      setActiveConversationId(localConversation.id);
-                      setMessages(localConversation.messages);
-                      setAttachments([]);
-                      setActiveTab("answer");
-                      localStorage.setItem(ACTIVE_CONVERSATION_KEY, localConversation.id);
-                      navigate(`/c/${localConversation.id}`, { replace: true });
-                      return;
-                    }
-
-                    void loadConversation(conversation.id);
-                  }}
-                  type="button"
-                >
-                  {loadingConversationId === conversation.id ? (
-                    <div className="flex items-center gap-2 text-sm">
-                      <LoaderCircle className="size-4 animate-spin" />
-                      {sidebarOpen ? "Loading..." : ""}
-                    </div>
-                  ) : sidebarOpen ? (
-                    <div>
-                      <p className="truncate text-sm">{conversation.title}</p>
-                      <p className="mt-1 text-xs text-[#756e64]">{formatTimestamp(conversation.updatedAt)}</p>
-                    </div>
-                  ) : (
-                    <div className="mx-auto size-2 rounded-full bg-current/80" />
-                  )}
-                </button>
-              )) : (
-                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-sm text-[#8f877b]">
-                  <p>Ask something to start history here.</p>
-                  <button
-                    className="mt-3 rounded-full border border-white/10 px-4 py-2 text-xs text-white transition hover:bg-white/8"
-                    onClick={() => setShowAuthModal(true)}
-                    type="button"
-                  >
-                    Sign in
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-white/6 p-3">
-              <div className="flex items-center justify-between rounded-2xl bg-white/4 px-3 py-3">
-                <div className="flex items-center gap-3 overflow-hidden">
-                  {user?.image ? (
-                    <img src={user.image} alt={user.name} className="size-10 rounded-full object-cover" />
-                  ) : (
-                    <div className="flex size-10 items-center justify-center rounded-full bg-[#33a8c7] text-sm font-semibold text-[#0b1215]">
-                      {initials || "G"}
-                    </div>
-                  )}
-                  {sidebarOpen ? (
-                    <div className="min-w-0">
-                      {user ? (
-                        <>
-                          <p className="truncate text-sm text-white">{user.name}</p>
-                          <p className="truncate text-xs text-[#91897d]">Signed in</p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="truncate text-sm text-white">Sign in</p>
-                          <button
-                            className="mt-1 rounded-full border border-white/10 px-4 py-2 text-xs text-white transition hover:bg-white/8"
-                            onClick={() => setShowAuthModal(true)}
-                            type="button"
-                          >
-                            Open login
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-                {sidebarOpen && user ? (
-                  <button className="rounded-xl p-2 text-[#b6aea2] transition hover:text-white" onClick={logout} type="button">
-                    <LogOut className="size-4" />
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
+          <SidebarContent
+            sidebarOpen={sidebarOpen}
+            user={user}
+            initials={initials}
+            conversations={conversations}
+            activeConversationId={activeConversationId}
+            loadingConversationId={loadingConversationId}
+            onToggleSidebar={() => setSidebarOpen((current) => !current)}
+            onStartNewChat={startNewChat}
+            onOpenConversation={openConversation}
+            onSignIn={() => setShowAuthModal(true)}
+            onLogout={logout}
+          />
         </aside>
 
-        <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-          <header className="shrink-0 border-b border-white/6 px-4 py-4 lg:px-8">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+        <main className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="shrink-0 border-b border-white/6 bg-[#161513]/95 backdrop-blur">
+            <div className="flex items-center justify-between gap-3 px-4 py-4 lg:hidden">
+              <div className="flex min-w-0 items-center gap-3">
+                <button
+                  className="rounded-xl p-2 text-[#c7c0b4] transition hover:bg-white/6 hover:text-white"
+                  onClick={() => setMobileSidebarOpen(true)}
+                  type="button"
+                >
+                  <PanelLeft className="size-6" />
+                </button>
+                <div className="min-w-0">
+                  <div className="text-[0.72rem] uppercase tracking-[0.28em] text-[#7a7368]">vectra</div>
+                  <div className="truncate text-lg text-[#efe7dc]">{hasConversation ? "Search session" : "What do you want to know?"}</div>
+                </div>
+              </div>
+            </div>
+
+            {hasConversation ? (
+              <div className="border-t border-white/6 px-4 lg:hidden">
+                <div className="flex items-center gap-3 overflow-x-auto py-3">
+                  <button className="rounded-2xl bg-white/7 px-4 py-3 text-lg text-white" onClick={startNewChat} type="button">
+                    <span className="mr-2 text-2xl leading-none">+</span>
+                    New
+                  </button>
+                  <button className="inline-flex items-center gap-2 rounded-2xl bg-[#ece8e2] px-5 py-3 text-base font-medium text-[#141311]" type="button">
+                    <Globe className="size-5" />
+                    Share
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="hidden items-center justify-between gap-4 px-4 py-4 lg:flex lg:px-8">
               <nav className="flex items-center gap-2 overflow-x-auto text-sm text-[#a79f92]">
                 <TopTab label="Answer" active={activeTab === "answer"} onClick={() => setActiveTab("answer")} icon={Sparkles} />
                 <TopTab label="Links" active={activeTab === "links"} onClick={() => setActiveTab("links")} icon={Link2} />
@@ -743,10 +711,18 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
+
+            <div className="px-4 lg:hidden">
+              <nav className="flex items-center gap-5 overflow-x-auto text-sm text-[#a79f92]">
+                <TopTab label="Answer" active={activeTab === "answer"} onClick={() => setActiveTab("answer")} icon={Sparkles} />
+                <TopTab label="Links" active={activeTab === "links"} onClick={() => setActiveTab("links")} icon={Link2} />
+                <TopTab label="Images" active={activeTab === "images"} onClick={() => setActiveTab("images")} icon={ImageIcon} />
+              </nav>
+            </div>
           </header>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-8 lg:px-10">
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-8 pb-48 lg:px-10 lg:pb-12">
               {error ? (
                 <div className="mx-auto mb-6 max-w-4xl rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
                   {error}
@@ -769,17 +745,14 @@ export default function Dashboard() {
                   isSubmitting={isSubmitting}
                   guestLimitReached={guestLimitReached}
                   guestUsageCount={guestUsageCount}
-                  onOpenLogin={() => {
-                    setAuthError("Guest users can ask only 5 times. Sign in to continue.");
-                    setShowAuthModal(true);
-                  }}
+                  onOpenLogin={openLoginModal}
                 />
               ) : activeTab === "answer" ? (
                 <div className="mx-auto max-w-4xl space-y-8">
                   {messages.map((message) =>
                     message.role === "USER" ? (
                       <div key={message.id} className="flex justify-end">
-                        <div className="max-w-[75%] rounded-[28px] rounded-br-md bg-white/6 px-5 py-4 text-lg text-[#ece4d9] shadow-[0_10px_40px_rgba(0,0,0,0.18)]">
+                        <div className="max-w-[88%] rounded-[28px] rounded-br-md bg-white/6 px-4 py-3 text-base text-[#ece4d9] shadow-[0_10px_40px_rgba(0,0,0,0.18)] sm:max-w-[75%] sm:px-5 sm:py-4 sm:text-lg">
                           {message.content}
                         </div>
                       </div>
@@ -810,7 +783,7 @@ export default function Dashboard() {
             </div>
 
             {hasConversation ? (
-              <div className="shrink-0 border-t border-white/6 bg-[#141311]/95 px-4 py-5 backdrop-blur lg:px-10">
+              <div className="absolute inset-x-0 bottom-0 shrink-0 border-t border-white/6 bg-[#141311]/92 px-4 py-4 backdrop-blur lg:static lg:bg-[#141311]/95 lg:px-10 lg:py-5">
                 <div className="mx-auto max-w-4xl">
                   <Composer
                     prompt={prompt}
@@ -827,11 +800,9 @@ export default function Dashboard() {
                     isSubmitting={isSubmitting}
                     guestLimitReached={guestLimitReached}
                     guestUsageCount={guestUsageCount}
-                    onOpenLogin={() => {
-                      setAuthError("Guest users can ask only 5 times. Sign in to continue.");
-                      setShowAuthModal(true);
-                    }}
+                    onOpenLogin={openLoginModal}
                     placeholder="Ask a follow-up"
+                    compact
                   />
                 </div>
               </div>
@@ -852,19 +823,181 @@ type ConversationStreamMetadata = {
   images: ImageItem[];
 };
 
+function SidebarContent({
+  sidebarOpen,
+  user,
+  initials,
+  conversations,
+  activeConversationId,
+  loadingConversationId,
+  onToggleSidebar,
+  onStartNewChat,
+  onOpenConversation,
+  onSignIn,
+  onLogout,
+  mobile = false,
+}: {
+  sidebarOpen: boolean;
+  user: StoredUser | null;
+  initials: string;
+  conversations: ConversationSummary[];
+  activeConversationId: string | null;
+  loadingConversationId: string | null;
+  onToggleSidebar: () => void;
+  onStartNewChat: () => void;
+  onOpenConversation: (conversationId: string) => void;
+  onSignIn: () => void;
+  onLogout: () => void;
+  mobile?: boolean;
+}) {
+  return (
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      <div className={`flex items-center justify-between ${mobile ? "px-6 py-6" : "px-5 py-5"}`}>
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white">
+            <Sparkles className="size-4" />
+          </div>
+          {sidebarOpen ? <span className="text-lg font-medium tracking-wide text-white">vectra</span> : null}
+          {sidebarOpen ? <BetaBadge /> : null}
+        </div>
+        <button
+          className="rounded-xl border border-white/8 bg-white/5 p-2 text-[#b8b1a5] transition hover:text-white"
+          onClick={onToggleSidebar}
+          type="button"
+        >
+          {mobile ? <X className="size-4" /> : <PanelLeft className="size-4" />}
+        </button>
+      </div>
+
+      <div className="px-3">
+        <button
+          className="flex w-full items-center gap-3 rounded-2xl bg-white/6 px-4 py-3 text-left text-[#f4efe8] transition hover:bg-white/10"
+          onClick={onStartNewChat}
+          type="button"
+        >
+          <MessageSquarePlus className="size-4 shrink-0" />
+          {sidebarOpen ? <span className="text-sm">New</span> : null}
+        </button>
+      </div>
+
+      <div className="mt-6 space-y-1 px-3 text-[#9b9488]">
+        <SidebarLink icon={Search} label="Computer" visible={sidebarOpen} mobile={mobile} />
+        <SidebarLink icon={Compass} label="Spaces" visible={sidebarOpen} mobile={mobile} />
+        <SidebarLink icon={Sparkles} label="Artefacts" visible={sidebarOpen} mobile={mobile} />
+        <SidebarLink icon={Link2} label="Customise" visible={sidebarOpen} mobile={mobile} />
+      </div>
+
+      <div className="mt-8 flex items-center gap-3 px-5 text-[#d8d1c5]">
+        <History className="size-4" />
+        {sidebarOpen ? <span className="text-sm">History</span> : null}
+      </div>
+
+      <div className="mt-3 flex-1 space-y-2 overflow-y-auto px-3 pb-4">
+        {conversations.length ? conversations.map((conversation) => (
+          <button
+            key={conversation.id}
+            className={`w-full rounded-2xl px-3 py-3 text-left transition ${
+              activeConversationId === conversation.id
+                ? "bg-white/10 text-white"
+                : "text-[#a79f92] hover:bg-white/5 hover:text-white"
+            }`}
+            onClick={() => onOpenConversation(conversation.id)}
+            type="button"
+          >
+            {loadingConversationId === conversation.id ? (
+              <div className="flex items-center gap-2 text-sm">
+                <LoaderCircle className="size-4 animate-spin" />
+                {sidebarOpen ? "Loading..." : ""}
+              </div>
+            ) : sidebarOpen ? (
+              <div>
+                <p className="truncate text-sm">{conversation.title}</p>
+                <p className="mt-1 text-xs text-[#756e64]">{formatTimestamp(conversation.updatedAt)}</p>
+              </div>
+            ) : (
+              <div className="mx-auto size-2 rounded-full bg-current/80" />
+            )}
+          </button>
+        )) : (
+          <div className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-sm text-[#8f877b]">
+            <p>Ask something to start history here.</p>
+            <button
+              className="mt-3 rounded-full border border-white/10 px-4 py-2 text-xs text-white transition hover:bg-white/8"
+              onClick={onSignIn}
+              type="button"
+            >
+              Sign in
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-white/6 p-3">
+        <div className="flex items-center justify-between rounded-2xl bg-white/4 px-3 py-3">
+          <div className="flex items-center gap-3 overflow-hidden">
+            {user?.image ? (
+              <img src={user.image} alt={user.name} className="size-10 rounded-full object-cover" />
+            ) : (
+              <div className="flex size-10 items-center justify-center rounded-full bg-[#33a8c7] text-sm font-semibold text-[#0b1215]">
+                {initials || "G"}
+              </div>
+            )}
+            {sidebarOpen ? (
+              <div className="min-w-0">
+                {user ? (
+                  <>
+                    <p className="truncate text-sm text-white">{user.name}</p>
+                    <p className="truncate text-xs text-[#91897d]">Signed in</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="truncate text-sm text-white">Sign in</p>
+                    <button
+                      className="mt-1 rounded-full border border-white/10 px-4 py-2 text-xs text-white transition hover:bg-white/8"
+                      onClick={onSignIn}
+                      type="button"
+                    >
+                      Open login
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : null}
+          </div>
+          {sidebarOpen && user ? (
+            <button className="rounded-xl p-2 text-[#b6aea2] transition hover:text-white" onClick={onLogout} type="button">
+              <LogOut className="size-4" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SidebarLink({
   icon: Icon,
   label,
   visible,
+  mobile = false,
 }: {
   icon: typeof Search;
   label: string;
   visible: boolean;
+  mobile?: boolean;
 }) {
   return (
-    <button className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-white/5 hover:text-white" type="button">
-      <Icon className="size-4 shrink-0" />
-      {visible ? <span className="text-sm">{label}</span> : null}
+    <button
+      className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-white/5 hover:text-white ${
+        mobile ? "justify-between text-[15px]" : ""
+      }`}
+      type="button"
+    >
+      <span className="flex items-center gap-3">
+        <Icon className="size-4 shrink-0" />
+        {visible ? <span className="text-sm">{label}</span> : null}
+      </span>
+      {mobile && visible ? <ChevronRight className="size-4 text-[#90887d]" /> : null}
     </button>
   );
 }
@@ -882,7 +1015,7 @@ function TopTab({
 }) {
   return (
     <button
-      className={`inline-flex items-center gap-2 border-b px-2 py-2 text-base transition ${
+      className={`inline-flex shrink-0 items-center gap-2 border-b px-1 py-3 text-[1.1rem] transition sm:px-2 sm:text-base ${
         active ? "border-white text-white" : "border-transparent text-[#968f83] hover:text-white"
       }`}
       onClick={onClick}
@@ -928,18 +1061,16 @@ function EmptyState({
   onOpenLogin: () => void;
 }) {
   return (
-    <div className="flex min-h-full flex-col items-center justify-center px-2 py-10">
-      <div className="mb-14 text-center">
-        <div className="mb-5 inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm uppercase tracking-[0.35em] text-[#8c8478]">
-          vectra
-        </div>
-        <h1 className="text-5xl font-medium tracking-tight text-[#f4efe8] lg:text-7xl">VECTRA AI</h1>
-        <div className="mt-5 flex justify-center">
-          <BetaBadge />
+    <div className="flex min-h-full flex-col items-center justify-between px-0 py-4 sm:px-2 sm:py-10">
+      <div className="flex flex-1 items-center justify-center text-center">
+        <div className="max-w-3xl px-2">
+          <h1 className="text-[2.65rem] font-medium tracking-tight text-[#f4efe8] sm:text-5xl lg:text-7xl">
+            What do you want to know?
+          </h1>
         </div>
       </div>
 
-      <div className="w-full max-w-3xl space-y-8">
+      <div className="w-full max-w-3xl space-y-6">
         <Composer
           prompt={prompt}
           setPrompt={setPrompt}
@@ -957,9 +1088,10 @@ function EmptyState({
           guestUsageCount={guestUsageCount}
           onOpenLogin={onOpenLogin}
           placeholder="Type @ for connectors and sources"
+          mobileDocked
         />
 
-        <div className="rounded-[26px] border border-white/7 bg-white/[0.045] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.28)]">
+        {/* <div className="hidden rounded-[26px] border border-white/7 bg-white/[0.045] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:block">
           <div className="mb-4 flex items-center gap-2 text-lg text-[#beb5a8]">
             <Sparkles className="size-4" />
             Try Computer
@@ -969,7 +1101,7 @@ function EmptyState({
               <div key={item} className="h-10 rounded-full border border-white/10 bg-[#23211e]" />
             ))}
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );
@@ -992,6 +1124,8 @@ function Composer({
   guestUsageCount,
   onOpenLogin,
   placeholder,
+  mobileDocked = false,
+  compact = false,
 }: {
   prompt: string;
   setPrompt: (value: string) => void;
@@ -1009,9 +1143,15 @@ function Composer({
   guestUsageCount: number;
   onOpenLogin: () => void;
   placeholder: string;
+  mobileDocked?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <div className="rounded-[30px] border border-white/10 bg-[#1f1d1a]/95 p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] backdrop-blur">
+    <div
+      className={`rounded-[30px] border border-white/10 bg-[#1f1d1a]/95 shadow-[0_30px_80px_rgba(0,0,0,0.35)] backdrop-blur ${
+        compact ? "p-3 sm:p-4" : mobileDocked ? "p-4 sm:p-5" : "p-4 sm:p-5"
+      }`}
+    >
       <input
         ref={fileInputRef}
         className="hidden"
@@ -1047,7 +1187,12 @@ function Composer({
         </div>
       ) : null}
       <textarea
-        className="min-h-[72px] w-full resize-none border-0 bg-transparent text-xl text-[#f4efe8] outline-none placeholder:text-[#7e776d]"
+        className={`w-full resize-none border-0 bg-transparent text-[#f4efe8] outline-none placeholder:text-[#7e776d] ${
+          compact
+            ? "min-h-[26px] text-base leading-6 sm:min-h-[30px] sm:text-lg"
+            : "min-h-[56px] text-lg sm:min-h-[72px] sm:text-xl"
+        }`}
+        rows={compact ? 1 : 3}
         onChange={(event) => setPrompt(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {
@@ -1074,22 +1219,23 @@ function Composer({
           </button>
         </div>
       ) : null}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3 text-sm text-[#a9a193]">
+      <div className={`${compact ? "mt-3" : "mt-4"} flex items-end justify-between gap-3 sm:flex-wrap sm:items-center sm:gap-4`}>
+        <div className="flex min-w-0 items-center gap-3 text-sm text-[#a9a193]">
           <button className="rounded-full border border-white/10 p-2 transition hover:bg-white/6" onClick={onAttachmentPick} type="button">
             <Plus className="size-4" />
           </button>
           <button
-            className={`rounded-full border px-4 py-2 transition ${
+            className={`inline-flex items-center rounded-full border px-4 py-2 transition ${
               composerMode === "search" ? "border-white/15 bg-white/8 text-white" : "border-white/8 text-[#9c9589]"
             }`}
             onClick={() => setComposerMode("search")}
             type="button"
           >
+            <Search className="mr-2 size-4" />
             Search
           </button>
           <button
-            className={`rounded-full border px-4 py-2 transition ${
+            className={`hidden rounded-full border px-4 py-2 transition sm:inline-flex ${
               composerMode === "focus" ? "border-white/15 bg-white/8 text-white" : "border-white/8 text-[#9c9589]"
             }`}
             onClick={() => setComposerMode("focus")}
@@ -1100,9 +1246,14 @@ function Composer({
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-sm text-[#9b9387]">Model</span>
+          <button className="rounded-full p-2 text-[#9b9387] transition hover:bg-white/6 hover:text-white sm:hidden" type="button">
+            <Mic className="size-5" />
+          </button>
+          {!compact ? <span className="hidden text-sm text-[#9b9387] sm:inline">Model</span> : null}
           <button
-            className="flex size-12 items-center justify-center rounded-full bg-[#d8d3cd] text-[#181614] transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-70"
+            className={`flex items-center justify-center rounded-full bg-[#d8d3cd] text-[#181614] transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-70 ${
+              compact ? "size-11" : "size-12"
+            }`}
             disabled={isSubmitting || (!prompt.trim() && attachments.length === 0) || guestLimitReached}
             onClick={guestLimitReached ? onOpenLogin : onSubmit}
             type="button"
@@ -1129,12 +1280,12 @@ function AnswerBody({
   const blocks = splitContentBlocks(content);
 
   return (
-    <div className="space-y-5 text-[1.1rem] leading-8 text-[#e7ded2]">
+    <div className="space-y-5 text-[1.02rem] leading-8 text-[#e7ded2] sm:text-[1.1rem]">
       {blocks.map((block, index) =>
         block.type === "code" ? (
           <pre
             key={`${block.type}-${index}`}
-            className="overflow-x-auto rounded-[28px] border border-white/6 bg-[#211f1c] px-5 py-4 text-[0.95rem] leading-7 text-[#f2ece4]"
+            className="overflow-x-auto rounded-[28px] border border-white/6 bg-[#211f1c] px-4 py-4 text-[0.88rem] leading-7 text-[#f2ece4] sm:px-5 sm:text-[0.95rem]"
           >
             <code>{block.content}</code>
           </pre>
@@ -1178,12 +1329,12 @@ function FollowUpsList({
 }) {
   return (
     <div className="space-y-4">
-      <h2 className="text-3xl font-medium text-[#f2ece4]">Follow-ups</h2>
+      <h2 className="text-2xl font-medium text-[#f2ece4] sm:text-3xl">Follow-ups</h2>
       <div className="overflow-hidden rounded-[26px] border border-white/7 bg-white/[0.025]">
         {followUps.map((item, index) => (
           <button
             key={`${item}-${index}`}
-            className="flex w-full items-center gap-3 border-b border-white/6 px-4 py-5 text-left text-xl text-[#d7cfc3] transition last:border-b-0 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed"
+            className="flex w-full items-center gap-3 border-b border-white/6 px-4 py-4 text-left text-lg text-[#d7cfc3] transition last:border-b-0 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed sm:py-5 sm:text-xl"
             disabled={disabled}
             onClick={() => onClick(item)}
             type="button"
@@ -1202,7 +1353,7 @@ function LinksPanel({ sources }: { sources: SourceItem[] }) {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <p className="text-xl text-[#9c9589]">Search results for the current answer</p>
+      <p className="text-lg text-[#9c9589] sm:text-xl">Search results for the current answer</p>
       {sources.length ? (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
           <div className="space-y-4">
@@ -1222,8 +1373,8 @@ function LinksPanel({ sources }: { sources: SourceItem[] }) {
                     <p className="text-xs text-[#7d766c]">{source.url}</p>
                   </div>
                 </div>
-                <h3 className="text-2xl text-[#58a6c1]">{source.title}</h3>
-                <p className="mt-2 text-lg leading-8 text-[#c7bfb3]">{description}</p>
+                <h3 className="text-xl text-[#58a6c1] sm:text-2xl">{source.title}</h3>
+                <p className="mt-2 text-base leading-7 text-[#c7bfb3] sm:text-lg sm:leading-8">{description}</p>
                 <div className="mt-4 flex items-center gap-3">
                   {source.content.split(/\s+/).filter(Boolean).length > 20 ? (
                     <button
@@ -1272,9 +1423,9 @@ function LinksPanel({ sources }: { sources: SourceItem[] }) {
 function ImagesPanel({ images }: { images: ImageItem[] }) {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <p className="text-xl text-[#9c9589]">Image results for the current answer</p>
+      <p className="text-lg text-[#9c9589] sm:text-xl">Image results for the current answer</p>
       {images.length ? (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {images.map((image, index) => (
             <a
               key={`${image.url}-${index}`}
