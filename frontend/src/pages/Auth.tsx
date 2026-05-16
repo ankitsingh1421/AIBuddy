@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { AuthDialog } from "@/components/AuthDialog";
+import { API_BASE_URL } from "@/lib/api";
 
 type Provider = "google" | "github";
 
-const API_BASE_URL = "http://localhost:5000";
 const STORAGE_KEY = "vectra_user";
 
 export default function Auth() {

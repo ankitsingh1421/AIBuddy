@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { AuthDialog } from "@/components/AuthDialog";
+import { API_BASE_URL } from "@/lib/api";
 
 type StoredUser = {
   id: string;
@@ -83,7 +84,6 @@ const PENDING_PROMPT_KEY = "vectra_pending_prompt";
 const ACTIVE_CONVERSATION_KEY = "vectra_active_conversation";
 const LOCAL_CONVERSATIONS_KEY = "vectra_local_conversations";
 const GUEST_USAGE_KEY = "vectra_guest_usage_count";
-const API_BASE_URL = "http://localhost:5000";
 const META_SEPARATOR = "\n__VECTRA_META__";
 const GUEST_QUESTION_LIMIT = 5;
 const NAV_ITEMS = [
